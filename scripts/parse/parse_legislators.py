@@ -3,12 +3,14 @@ import pandas as pd
 import os
 from pathlib import Path
 
+# file paths
 BASE_DIR = "./"
 RAW_FILE = os.path.join(BASE_DIR, "data/raw/members/legislators.json")
 OUT_DIR = os.path.join(BASE_DIR, "data/clean")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-conversion = {}
+# get conversions from lis and fec to bioguide id for standardization
+lis_conversion = {}
 fec_conversion = {}
 
 with open(RAW_FILE, "r") as f:
@@ -17,14 +19,17 @@ with open(RAW_FILE, "r") as f:
 rows = []
 
 for person in data:
+    # get all their id versions
     bioguide = person["id"].get("bioguide")
     lis = person["id"].get("lis")
     fec = person["id"].get("fec")
-    conversion[lis] = bioguide
+    if lis:
+        lis_conversion[lis] = bioguide
     if fec:
         for fec_code in fec:
             fec_conversion[fec_code] = bioguide
 
+    # get info
     name = person["name"].get("official_full")
 
     start = person["terms"][0].get("start")
@@ -41,12 +46,14 @@ for person in data:
         "end": info.get("end")
     })
 
-with open(OUT_DIR + "/lookup.json", "w", encoding="utf-8") as f:
-    f.write(json.dumps(conversion))
+# save conversion jsons
+with open(OUT_DIR + "/lis_bio.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(lis_conversion))
 
-with open(OUT_DIR + "/fec_cand.json", "w", encoding="utf-8") as f:
+with open(OUT_DIR + "/fec-cand_bio.json", "w", encoding="utf-8") as f:
     f.write(json.dumps(fec_conversion))
 
+# save people table
 df = pd.DataFrame(rows).dropna()
 df.to_csv(f"{OUT_DIR}/people.csv", index=False)
 

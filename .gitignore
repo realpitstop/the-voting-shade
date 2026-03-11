@@ -5,7 +5,7 @@
 /data/raw/members/
 /data/raw/pacs/
 /.venv/
-/scripts/ingest/headers.py
+/scripts/ingest/UserAgent.py
 __pycache__/
 .DS_Store
 *.py[cod]

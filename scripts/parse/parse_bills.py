@@ -9,10 +9,11 @@ from tqdm import tqdm
 from bulk_inference import PolicyClassifier
 from concurrent.futures import ThreadPoolExecutor
 import dateutil.parser as parser
-from pathlib import Path
 
+# get the classifier
 classifier = PolicyClassifier()
 
+# manually map the string to the number
 CONGRESS_MAP = {
     "one hundred thirteenth": 113,
     "one hundred fourteenth": 114,
@@ -23,18 +24,24 @@ CONGRESS_MAP = {
     "one hundred nineteenth": 119
 }
 
+# file paths
 BASE_DIR = "./"
 RAW_DIR = os.path.join(BASE_DIR, "data/raw/govinfo/bills")
 OUT_DIR = os.path.join(BASE_DIR, "data/clean")
+TOPICS_CSV = f"{OUT_DIR}/topics.csv"
+os.makedirs(OUT_DIR, exist_ok=True)
 
+# get the LIS to Bioguide map
 with open(OUT_DIR + "/lookup.json", "r", encoding="utf-8") as f:
     LIS_MAP = json.load(f)
 
+# extract the text
 def extract_text_recursive(elem):
     if elem is None:
         return ""
     return "".join(elem.itertext()).strip()
 
+# extract congress number
 def quick_extract(text):
     text_lower = text.lower()
 
@@ -48,13 +55,13 @@ def quick_extract(text):
             return num
 
     return None
-global count
-count = 0
+
 def process_bill(file_path, index):
     try:
         tree = ET.parse(file_path)
         root = tree.getroot()
 
+        # get bill data
         legis_num = str(root.findtext(".//legis-num")).replace(".", "").replace(" ", "").strip()
         chamber = "senate" if legis_num[0].upper() == "S" else "house" if legis_num[0].upper() == "H" else None
         congress = quick_extract(root.findtext(".//congress").strip())
@@ -80,7 +87,8 @@ def process_bill(file_path, index):
             date = parser.parse(re.sub(r'\s*\([^)]*\)', '', root.findtext(".//action-date"))).strftime("%Y%m%d")
         comm_el = root.find(".//committee-name")
         sponsor_el = root.find(".//sponsor")
-
+        
+        # get sponsors
         local_sponsors = []
         if sponsor_el is not None:
             id = sponsor_el.get('name-id')
@@ -129,8 +137,6 @@ def process_bill(file_path, index):
         print(f"Error processing {file_path}: {e}")
         return None
 
-os.makedirs(OUT_DIR, exist_ok=True)
-
 CHAMBER_MAP = {
     "IN THE HOUSE OF REPRESENTATIVES": "house",
     "IN THE SENATE OF THE UNITED STATES": "senate"
@@ -138,19 +144,21 @@ CHAMBER_MAP = {
 files = [os.path.join(RAW_DIR, f) for f in os.listdir(RAW_DIR) if f.endswith(".xml")]
 
 bills_list, committees_list, sponsors_list, topics_list = [], [], [], []
+
+# Get topics for 64 bills at a time
 inference_buffer = []
 BATCH_SIZE = 64
-SAVE_INTERVAL = 10000
-temp_topics = []  # Temporary list for the 10k chunk
-TOPICS_CSV = f"{OUT_DIR}/topics.csv"
 
+SAVE_INTERVAL = 10000
+temp_topics = []  # Temporary list to save topics every SAVE_INTERVAL bills
+
+# process multiple bills sumultaneously
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(process_bill, f, i) for i, f in enumerate(files)]
 
     for future in tqdm(futures, desc="Processing Bills & Classifying"):
         result = future.result()
         if not result:
-            count += 1
             continue
 
         b, c, s = result
@@ -158,15 +166,18 @@ with ThreadPoolExecutor() as executor:
         committees_list.extend(c)
         sponsors_list.extend(s)
 
+        # add text and id to buffer
         if b.get("raw_text"):
             inference_buffer.append({"id": b["bill_id"], "text": b["raw_text"]})
 
+        # perform inference if buffer size exceeded
         if len(inference_buffer) >= BATCH_SIZE:
             texts = [item["text"] for item in inference_buffer]
             ids = [item["id"] for item in inference_buffer]
 
             predictions = classifier.get_policy_codes_batch(texts)
 
+            # store topic code prediction
             for bill_id, codes in zip(ids, predictions):
                 for code in codes:
                     topic_id = code[0] if isinstance(code, list) else code
@@ -174,10 +185,12 @@ with ThreadPoolExecutor() as executor:
 
             inference_buffer = []
 
+        # autosave
         if len(temp_topics) >= SAVE_INTERVAL:
             pd.DataFrame(temp_topics).to_csv(TOPICS_CSV, mode='a', index=False, header=False)
             temp_topics = []
 
+# clean up remaining bills in buffer
 if inference_buffer:
     texts = [item["text"] for item in inference_buffer]
     ids = [item["id"] for item in inference_buffer]
@@ -187,6 +200,7 @@ if inference_buffer:
             topic_id = code[0] if isinstance(code, list) else code
             temp_topics.append({"bill_id": bill_id, "topic_id": topic_id})
 
+# autosave
 if temp_topics:
     pd.DataFrame(temp_topics).to_csv(TOPICS_CSV, mode='a', index=False, header=False)
 
@@ -198,17 +212,23 @@ def major_title(code):
 def sub_title(code):
     return classifier.get_meaning(str(code)).split(" – ")[0]
 
+# get topic and subtopic actual text
 topics["topic"] = topics["topic_id"].apply(major_title)
 topics["subtopic"] = topics["topic_id"].apply(sub_title)
 
 topics.to_csv(TOPICS_CSV)
 
+# store bills
 bills = pd.DataFrame(bills_list).drop(columns=["raw_text"])
 bills = bills.dropna().drop_duplicates(subset=["congress", "bill_number"])
 bills.to_csv(f"{OUT_DIR}/bills.csv", index=False)
+
+# store committees
 committees = pd.DataFrame(committees_list).dropna().drop_duplicates()
-sponsors = pd.DataFrame(sponsors_list).dropna()
 committees = committees[committees['committee_id'].isin(bills["committee_id"])]
-sponsors = sponsors[sponsors['bill_id'].isin(bills["bill_id"])]
 committees.to_csv(f"{OUT_DIR}/committees.csv", index=False)
+
+# store sponsors
+sponsors = pd.DataFrame(sponsors_list).dropna()
+sponsors = sponsors[sponsors['bill_id'].isin(bills["bill_id"])]
 sponsors.to_csv(f"{OUT_DIR}/sponsors.csv", index=False)

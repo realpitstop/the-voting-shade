@@ -19,7 +19,7 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 5. Advanced JSON Request --> SQL Query Converter (Faiss-powered column and value matching)
 
 ## Recreation steps
-1. Ingest data (make your own headers) (ingest_xxxxx.py)
+1. Ingest data (make your own UserAgent) (ingest_xxxxx.py)
 2. Create dataset + train model using annotation/ folder **(NOT VERIFIED TO WORK)**
 3. Parse data (parse_xxxxx.py), !! (parse_pacs before parse_transactions, parse_bills before parse_votes)
 
@@ -31,4 +31,4 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 - Bills, Votes, & Congresspeople: 113th to 119th Congress (2013 to Present (until 2027))
 - PAC transactions: 1999-2026
 
-## If you find any errors or data collection inaccuracies, please leave a note somehow.
+## If you find any errors or data collection inaccuracies, please contact thevotingshade@gmail.com

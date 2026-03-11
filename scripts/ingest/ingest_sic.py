@@ -9,6 +9,7 @@ from tqdm import tqdm
 from pathlib import Path
 from headers import headerSEC 
 
+# example submissions.zip file
 """
 {'cik': '0000004926', 'entityType': 'other', 'sic': '', 'sicDescription': '', 'ownerOrg': None, 
 'insiderTransactionForOwnerExists': 0, 'insiderTransactionForIssuerExists': 0, 'name': 'AMERICAN ENTERPRISE DEVELOPMENT CORP', 
@@ -23,12 +24,17 @@ from headers import headerSEC
 'form': [], 'fileNumber': [], 'filmNumber': [], 'items': [], 'core_type': [], 'size': [], 'isXBRL': [], 'isInlineXBRL': [], 
 'primaryDocument': [], 'primaryDocDescription': []}, 'files': []}}
 """
+# file paths
 BASE_DIR = "./"
 OUTPUT_PATH = os.path.join(BASE_DIR, "data/clean/")
 
+# url
 SUBMISSIONS_URL = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
+
+# header
 headers = headerSEC
 
+# manually mapped companies
 mapping = {
     "Space Exploration Technologies Corp.": "3761",
     "Koch Industries": "2869",
@@ -102,6 +108,7 @@ mapping = {
     "GENERAL ELECTRIC CO (AFF) GELCO CORP": "7515"
 }
 
+# from submissions.zip, make map of company names to their SIC industry codes
 def process_zip_continuously(content, encoding):
     if 'gzip' in encoding:
         content = gzip.decompress(content)
@@ -116,7 +123,7 @@ def process_zip_continuously(content, encoding):
                     print("Error:", e, name)
                 nameNow = company.get("name")
                 sic = company.get("sic", None)
-                if sic is None or sic == "": continue
+                if sic is None or sic == "": continue # only work if there is an SIC code
                 for nameAll in [nameNow] + [item['name'] for item in company.get("formerNames", [])]:
                     mapping.setdefault(nameAll, sic)
 
@@ -126,7 +133,7 @@ def download_zip(zip_url):
     r.raise_for_status()
     process_zip_continuously(r.content, r.headers.get('Content-Encoding', '').lower())
 
-
 download_zip(SUBMISSIONS_URL)
+
 with open(OUTPUT_PATH + "name_sic.json", 'w') as f:
     json.dump(mapping, f, indent=4)

@@ -2,6 +2,10 @@ import json
 from pathlib import Path
 import os
 
+# file paths
+BASE_DIR = "./"
+OUTPUT_FILE = os.path.join(BASE_DIR, "data/clean/sic_meaning.json")
+
 # pre existing table found online with my own additions when necessary
 map = """A Division A Agriculture, Forestry, and Fishing
 NA 00 000 0000 None
@@ -1528,7 +1532,7 @@ I 89 890 8900 Services, Not Elsewhere Classified (NEC)
 * 90 903 9030 Local Government (OES designation)
 * 99 999 9995 Non-operating establishments."""
 
-
+# convert SIC policy code into it's industry
 def classify_sic_policy(sic_code):
     sic = int(sic_code)
     p2 = sic // 100
@@ -1579,15 +1583,10 @@ def classify_sic_policy(sic_code):
 
     raise ValueError(sic_code)
 
-
-BASE_DIR = "./"
-OUTPUT_FILE = os.path.join(BASE_DIR, "data/clean/sic_meaning.json")
-
-rows = map.split("\n")
-rows = [row.split(" ") for row in rows]
+# filter block of texts into json
+rows = [row.split(" ") for row in map.split("\n")]
 rows = {row[3]: " ".join(row[4:]) for row in rows if len(row) >= 5 and row[3].isdigit()}
 rows = {key: classify_sic_policy(key) for key, value in rows.items()}
-print("\n".join(f"{k}: {v}" for k, v in rows.items()))
 
 with open(OUTPUT_FILE, 'w') as f:
     json.dump(rows, f, indent=4)
