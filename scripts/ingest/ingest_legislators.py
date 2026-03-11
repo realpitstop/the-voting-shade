@@ -4,7 +4,7 @@ import requests
 from pathlib import Path
 from headers import headerUSER
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 MEM_DIR = os.path.join(BASE_DIR, "data/raw/members")
 MEM_URL = "https://unitedstates.github.io/congress-legislators/legislators-current.json"
 MEM_URL2 = "https://unitedstates.github.io/congress-legislators/legislators-historical.json"

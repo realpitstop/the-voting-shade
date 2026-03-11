@@ -6,7 +6,7 @@ from tqdm import tqdm
 from lxml import etree as ET
 from pathlib import Path
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 RAW_DIR = os.path.join(BASE_DIR, "data/raw/govinfo/billstatus")
 OUT_DIR = os.path.join(BASE_DIR, "data/clean")
 

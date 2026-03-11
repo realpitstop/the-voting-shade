@@ -14,7 +14,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 
 TRAIN_FILE = "output.jsonl"
 MODEL_NAME = "bert-base-uncased"
-OUTPUT_DIR = "/content/drive/MyDrive/"
+OUTPUT_DIR = "./"
 MAX_LEN = 512
 EPOCHS = 12
 BATCH = 8

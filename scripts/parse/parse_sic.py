@@ -1580,7 +1580,7 @@ def classify_sic_policy(sic_code):
     raise ValueError(sic_code)
 
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 OUTPUT_FILE = os.path.join(BASE_DIR, "data/clean/sic_meaning.json")
 
 rows = map.split("\n")

@@ -6,10 +6,9 @@ import zipfile
 import zlib
 
 import requests
-from pathlib import Path
 from headers import headersENC
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 RAW_DIR = os.path.join(BASE_DIR, "data/raw/govinfo/bills/")
 os.makedirs(RAW_DIR, exist_ok=True)
 

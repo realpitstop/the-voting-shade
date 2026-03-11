@@ -23,7 +23,7 @@ CONGRESS_MAP = {
     "one hundred nineteenth": 119
 }
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 RAW_DIR = os.path.join(BASE_DIR, "data/raw/govinfo/bills")
 OUT_DIR = os.path.join(BASE_DIR, "data/clean")
 

@@ -11,7 +11,7 @@ from headers import headerKEEPALIVE
 START = 2000
 END = 2026
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 MEM_DIR = os.path.join(BASE_DIR, "data/raw/pacs")
 MASTER_BASE = "https://www.fec.gov/files/bulk-downloads/YEAR/TITLEYR.zip"
 HEADER_URL = "https://www.fec.gov/files/bulk-downloads/data_dictionaries/TITLE_header_file.csv"

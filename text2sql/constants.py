@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 
 SCHEMA_PATH = "./text2sql/schema.json"
 GRAPH_PATH = "./text2sql/graph.pickle"

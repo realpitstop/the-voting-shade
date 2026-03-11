@@ -10,7 +10,7 @@ from lxml import etree as ET
 from pathlib import Path
 from headers import headersENC
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 RAW_DIR = os.path.join(BASE_DIR, "data/raw/govinfo/billstatus/")
 os.makedirs(RAW_DIR, exist_ok=True)
 

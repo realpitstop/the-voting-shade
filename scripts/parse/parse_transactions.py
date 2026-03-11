@@ -7,7 +7,7 @@ from tqdm import tqdm
 from rapidfuzz import fuzz, process
 import numpy as np
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 OUTPUT_DIR = os.path.join(BASE_DIR, "data/clean/")
 INPUT_DIR = os.path.join(BASE_DIR, "data/raw/pacs/")
 NAME_SIC_PATH = os.path.join(OUTPUT_DIR, "name_sic.json")

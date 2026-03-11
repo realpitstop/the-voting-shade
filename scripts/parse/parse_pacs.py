@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import pandas as pd
 
-BASE_DIR = Path(os.path.abspath(__file__)).parent.parent.parent
+BASE_DIR = "./"
 DATA_PATH = os.path.join(BASE_DIR, "data/raw/pacs")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data/raw/pacs")
 RAW_FILE = os.path.join(BASE_DIR, "data/raw/members/legislators.json")
