@@ -3,11 +3,11 @@ import json
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from typing import List
 
-DEFLT_MEANINGS_PATH="./../data/clean/stances.jsonl"
+DEFLT_MEANINGS_PATH="./data/clean/stances.jsonl"
 
 class PolicyClassifier:
-    def __init__(self, meanings_path=DEFLT_MEANINGS_PATH, model_path="../annotation/topic_classifier_model",
-                 id2code_path="../annotation/id2code.json",
+    def __init__(self, meanings_path=DEFLT_MEANINGS_PATH, model_path="./annotation/topic_classifier_model",
+                 id2code_path="./annotation/id2code.json",
                  threshold=0.5, thresh2=0.2):
 
         self.meanings = {}

@@ -8,7 +8,8 @@ from make_sql import build_sql_from_request
 from constants import SCHEMA_PATH
 from QueryBuilder import QueryBuilder
 
-CLEAN_PATH = "../data/clean/"
+CLEAN_PATH = "./data/clean/"
+
 with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
     tables = set(i["table"] for i in json.load(f))
 
