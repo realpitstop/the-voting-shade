@@ -23,8 +23,8 @@ from headers import headerSEC
 'form': [], 'fileNumber': [], 'filmNumber': [], 'items': [], 'core_type': [], 'size': [], 'isXBRL': [], 'isInlineXBRL': [], 
 'primaryDocument': [], 'primaryDocDescription': []}, 'files': []}}
 """
-
-OUTPUT_PATH = os.path.join(Path(os.path.abspath(__file__)).parent.parent.parent, "data/clean/name_sic.json")
+BASE_DIR = "./"
+OUTPUT_PATH = os.path.join(BASE_DIR, "data/clean/")
 
 SUBMISSIONS_URL = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 headers = headerSEC
@@ -128,5 +128,5 @@ def download_zip(zip_url):
 
 
 download_zip(SUBMISSIONS_URL)
-with open(OUTPUT_PATH, 'w') as f:
+with open(OUTPUT_PATH + "name_sic.json", 'w') as f:
     json.dump(mapping, f, indent=4)

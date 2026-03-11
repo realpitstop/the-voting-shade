@@ -19,10 +19,9 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 5. Advanced JSON Request --> SQL Query Converter (Faiss-powered column and value matching)
 
 ## Recreation steps
-1. Make data/ folder with clean/ and raw/ (with annotation/, govinfo/ (billstatus/, bills/), members/, pacs/)
-2. Ingest data (make your own headers) (ingest_xxxxx.py)
-3. Create dataset + train model using annotation/ folder (NOT VERIFIED TO WORK)
-4. Parse data (parse_xxxxx.py), !! (parse_pacs before parse_transactions, parse_bills before parse_votes)
+1. Ingest data (make your own headers) (ingest_xxxxx.py)
+2. Create dataset + train model using annotation/ folder **(NOT VERIFIED TO WORK)**
+3. Parse data (parse_xxxxx.py), !! (parse_pacs before parse_transactions, parse_bills before parse_votes)
 
 ## To do SQL queries
 1. Create graph (text2sql/make_graph.py)

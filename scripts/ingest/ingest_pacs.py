@@ -13,6 +13,7 @@ END = 2026
 
 BASE_DIR = "./"
 MEM_DIR = os.path.join(BASE_DIR, "data/raw/pacs")
+os.makedirs(MEM_DIR, exist_ok=True)
 MASTER_BASE = "https://www.fec.gov/files/bulk-downloads/YEAR/TITLEYR.zip"
 HEADER_URL = "https://www.fec.gov/files/bulk-downloads/data_dictionaries/TITLE_header_file.csv"
 

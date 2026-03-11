@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 XML_DIR = "./data/raw/govinfo/bills/"
 CAP_CSV = "./data/raw/annotation/cap_class.csv"
-OUTPUT = "./data/clean/output.jsonl"
+OUTPUT = "./output.jsonl"
 
 parser = etree.XMLParser(recover=True)
 

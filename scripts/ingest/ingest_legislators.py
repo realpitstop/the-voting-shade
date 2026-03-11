@@ -6,6 +6,7 @@ from headers import headerUSER
 
 BASE_DIR = "./"
 MEM_DIR = os.path.join(BASE_DIR, "data/raw/members")
+os.makedirs(MEM_DIR, exist_ok=True)
 MEM_URL = "https://unitedstates.github.io/congress-legislators/legislators-current.json"
 MEM_URL2 = "https://unitedstates.github.io/congress-legislators/legislators-historical.json"
 CONVERSION = "https://www.senate.gov/legislative/LIS_MEMBER/cvc_member_data.xml"

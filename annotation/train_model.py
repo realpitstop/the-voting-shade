@@ -12,7 +12,7 @@ from transformers import (
 )
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-TRAIN_FILE = "output.jsonl"
+TRAIN_FILE = "./output.jsonl"
 MODEL_NAME = "bert-base-uncased"
 OUTPUT_DIR = "./"
 MAX_LEN = 512
