@@ -9,12 +9,14 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 - Classify bills into Comparative Agenda Project policy topics + subtopics
 - Link Corporate PACs to real companies + industries
 
+![Demonstrating how the pipeline converts a request into SQL into data](text2sql.png)
+
 ## Contains
 1. Ingestion of data from: FEC, SEC, Congress, Senate, House
 2. Parsing of data (Bills, PACs, etc.)
 3. Training & Inference for automatic Bill topic Classifier
 4. Matching of Corporate PACs to SEC filing companies (60% of total PAC money)
-5. Advanced JSON Request --> SQL Query Converter
+5. Advanced JSON Request --> SQL Query Converter (Faiss-powered column and value matching)
 
 ## Recreation steps
 1. Make data/ folder with clean/ and raw/ (with annotation/, govinfo/ (billstatus/, bills/), members/, pacs/)
