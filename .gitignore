@@ -1,0 +1,12 @@
+/data/clean/
+/data/raw/
+/data/raw/annotation/
+/data/raw/govinfo/
+/data/raw/members/
+/data/raw/pacs/
+/.venv/
+/scripts/ingest/headers.py
+__pycache__/
+.DS_Store
+*.py[cod]
+/annotation/topic_classifier_model/

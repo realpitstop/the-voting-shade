@@ -1,0 +1,175 @@
+[
+  {
+    "table": "bills",
+    "column": "bill_id",
+    "description": "Unique database ID for the bill",
+    "type": "primarykey"
+  },
+  {
+    "table": "bills",
+    "column": "bill_number",
+    "description": "Official legislative bill number"
+  },
+  {
+    "table": "bills",
+    "column": "congress",
+    "description": "The Number of the Congress (e.g., 118)"
+  },
+  {
+    "table": "bills",
+    "column": "session",
+    "description": "Legislative session (1st or 2nd)"
+  },
+  {
+    "table": "bills",
+    "column": "title",
+    "description": "Official title describing the bill"
+  },
+  {
+    "table": "bills",
+    "column": "introduced_date",
+    "description": "Date the bill was introduced"
+  },
+  {
+    "table": "bills",
+    "column": "chamber_of_origin",
+    "description": "Chamber the bill originated from"
+  },
+  {
+    "table": "bills",
+    "column": "committee_id",
+    "description": "ID of committee reviewing the bill",
+    "type": "committees",
+    "fanout": 1
+  },
+  {
+    "table": "committees",
+    "column": "committee_id",
+    "description": "Unique ID for the committee",
+    "type": "primarykey"
+  },
+  {
+    "table": "committees",
+    "column": "committee",
+    "description": "Name of the committee"
+  },
+  {
+    "table": "sponsors",
+    "column": "bill_id",
+    "description": "Foreign key to bills table",
+    "type": "bills",
+    "fanout": 1
+  },
+  {
+    "table": "sponsors",
+    "column": "bioguide_id",
+    "description": "Foreign key to people table",
+    "type": "people",
+    "fanout": 1
+  },
+  {
+    "table": "sponsors",
+    "column": "role",
+    "description": "Sponsorship type (sponsor or cosponsor)"
+  },
+  {
+    "table": "topics",
+    "column": "bill_id",
+    "description": "Foreign key to bills table",
+    "type": "bills",
+    "fanout": 0
+  },
+  {
+    "table": "topics",
+    "column": "topic_id",
+    "description": "Bill topic ID",
+    "type": "primarykey"
+  },
+  {
+    "table": "topics",
+    "column": "topic",
+    "description": "Bill topic category classification"
+  },
+  {
+    "table": "topics",
+    "column": "subtopic",
+    "description": "Bill subtopic category classification"
+  },
+  {
+    "table": "people",
+    "column": "bioguide_id",
+    "description": "Unique ID for the congressperson",
+    "type": "primarykey"
+  },
+  {
+    "table": "people",
+    "column": "name",
+    "description": "Full name of the congressperson"
+  },
+  {
+    "table": "people",
+    "column": "state",
+    "description": "State represented by the lawmaker"
+  },
+  {
+    "table": "people",
+    "column": "party",
+    "description": "Political party lawmaker is part of"
+  },
+  {
+    "table": "people",
+    "column": "rep_chamber",
+    "description": "Chamber of lawmaker"
+  },
+  {
+    "table": "people",
+    "column": "start",
+    "description": "Date lawmaker's term started"
+  },
+  {
+    "table": "people",
+    "column": "end",
+    "description": "Date lawmaker's term ended"
+  },
+  {
+    "table": "votes",
+    "column": "bill_id",
+    "description": "Foreign key to bills table",
+    "type": "bills",
+    "fanout": 1
+  },
+  {
+    "table": "votes",
+    "column": "stage",
+    "description": "Which voting stage the bill is in"
+  },
+  {
+    "table": "votes",
+    "column": "bioguide_id",
+    "description": "Foreign key to people table",
+    "type": "people",
+    "fanout": 1
+  },
+  {
+    "table": "votes",
+    "column": "voted",
+    "description": "If the lawmaker voted Yea"
+  },
+  {
+    "table": "donations",
+    "column": "industry",
+    "description": "Industry of corporate PAC"
+  },
+  {
+    "table": "donations",
+    "column": "bioguide_id",
+    "description": "Foreign key to people table",
+    "type": "people",
+    "fanout": 1
+  },
+  {
+    "table": "donations",
+    "column": "money_recieved",
+    "description": "Money recieved from the corporate PAC industry"
+  }
+]
