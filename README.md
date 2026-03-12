@@ -1,8 +1,6 @@
 # The Voting Shade
 Last updated: 03/11/26
 
-Last updated: 03/11/26
-
 Project to collect data on legislator voting and funding, and bill topics. Intention to bring accountability to Congress and ease access to data through abstraction of database interaction.
 
 ### If you find any errors or data collection inaccuracies, please contact thevotingshade@gmail.com
