@@ -59,12 +59,3 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 3. Run query  
    python text2sql/execute_sql.py
 
-
-1. Create schema graph if not exists
-   python text2sql/make_graph.py
-
-2. Add request to `execute_sql.py`
-
-3. Run query  
-   python text2sql/execute_sql.py
-
