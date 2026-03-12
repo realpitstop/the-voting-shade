@@ -224,8 +224,9 @@ bills = bills.dropna().drop_duplicates(subset=["congress", "bill_number"])
 bills.to_csv(f"{OUT_DIR}/bills.csv", index=False)
 
 # store committees
-committees = pd.DataFrame(committees_list).dropna().drop_duplicates()
+committees = pd.DataFrame(committees_list).dropna().drop_duplicates(subset="committee_id")
 committees = committees[committees['committee_id'].isin(bills["committee_id"])]
+committees['committee'] = committees['committee'].apply(lambda text: " ".join(text.split()))
 committees.to_csv(f"{OUT_DIR}/committees.csv", index=False)
 
 # store sponsors
