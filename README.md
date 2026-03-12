@@ -1,34 +1,54 @@
 # The Voting Shade
-Last updated: 03/10/26
-## Purpose
+Last updated: 03/11/26
+
 Project to collect data on legislator voting and funding, and bill topics. Intention to bring accountability to Congress and ease access to data through abstraction of database interaction.
 
-## Usage
-- Easily access data linking donations, bills, votes, and committees
-- Utilize parsed tables / ingestion scripts from government sources
-- Classify bills into Comparative Agenda Project policy topics + subtopics
-- Link Corporate PACs to real companies + industries
+### If you find any errors or data collection inaccuracies, please contact thevotingshade@gmail.com
+
+## Table of Contents
+1. [Features](#features)
+2. [Project Structure](#project-structure)
+3. [Data Coverage](#data-coverage)
+4. [Recreation steps](#recreation-steps)
+5. [To do SQL queries](#to-do-sql-queries)
+
+## Project Structure
+.
+├── annotation
+├── scripts
+│   ├── ingest
+│   └── parse
+└── text2sql
+
+## Features
+
+- Data ingestion from FEC, SEC, and Congress datasets
+- Parsing of bills, votes, PACs, and transactions
+- Bill topic classification using Comparative Agenda Project topics
+- Matching Corporate PACs to SEC companies
+- Super simple queries → Complex SQL query system
 
 ![Demonstrating how the pipeline converts a request into SQL into data](text2sql.png)
 
-## Contains
-1. Ingestion of data from: FEC, SEC, Congress, Senate, House
-2. Parsing of data (Bills, PACs, etc.)
-3. Training & Inference for automatic Bill topic Classifier
-4. Matching of Corporate PACs to SEC filing companies (60% of total PAC money)
-5. Advanced JSON Request --> SQL Query Converter (Faiss-powered column and value matching)
+## Data Coverage
+
+- Bills & Votes: 113th–119th Congress (2013–Present)
+- Legislators: All with registered bioguide_ids & have sponsored/cosponsored a bill
+- PAC Transactions: 1999–2026
 
 ## Recreation steps
-1. Ingest data (make your own UserAgent) (ingest_xxxxx.py)
-2. Create dataset + train model using annotation/ folder **(NOT VERIFIED TO WORK)**
-3. Parse data (parse_xxxxx.py), !! (parse_pacs before parse_transactions, parse_bills before parse_votes)
+
+1. Ingest data (make your own UserAgent) (ingest_*.py)
+2. Create dataset + train model using annotation/ folder **(MAY BE BUGGY)**
+3. Parse data (parse_*.py) (parse_pacs then parse_transactions, parse_bills then parse_votes)
 
 ## To do SQL queries
-1. Create graph (text2sql/make_graph.py)
-2. Type a request into request variable in execute_sql.py and execute file
 
-## Data dates
-- Bills, Votes, & Congresspeople: 113th to 119th Congress (2013 to Present (until 2027))
-- PAC transactions: 1999-2026
+1. Create schema graph if not exists
+   python text2sql/make_graph.py
 
-## If you find any errors or data collection inaccuracies, please contact thevotingshade@gmail.com
+2. Add request to `execute_sql.py`
+
+3. Run query  
+   python text2sql/execute_sql.py
+
