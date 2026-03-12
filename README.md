@@ -49,10 +49,6 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 2. Create dataset + train model using annotation/ folder **(MAY BE BUGGY)**
 3. Parse data (parse_*.py) (parse_pacs then parse_transactions, parse_bills then parse_votes)
 
-1. Ingest data (make your own UserAgent) (ingest_*.py)
-2. Create dataset + train model using annotation/ folder **(MAY BE BUGGY)**
-3. Parse data (parse_*.py) (parse_pacs then parse_transactions, parse_bills then parse_votes)
-
 ## To do SQL queries
 
 1. Create schema graph if not exists
