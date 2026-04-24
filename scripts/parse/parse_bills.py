@@ -143,7 +143,7 @@ CHAMBER_MAP = {
 }
 files = [os.path.join(RAW_DIR, f) for f in os.listdir(RAW_DIR) if f.endswith(".xml")]
 
-bills_list, committees_list, sponsors_list, topics_list = [], [], [], []
+bills_list, sponsors_list, topics_list = [], [], []
 
 # Get topics for 64 bills at a time
 inference_buffer = []
@@ -163,7 +163,6 @@ with ThreadPoolExecutor() as executor:
 
         b, c, s = result
         bills_list.append(b)
-        committees_list.extend(c)
         sponsors_list.extend(s)
 
         # add text and id to buffer
@@ -222,12 +221,6 @@ topics.to_csv(TOPICS_CSV)
 bills = pd.DataFrame(bills_list).drop(columns=["raw_text"])
 bills = bills.dropna().drop_duplicates(subset=["congress", "bill_number"])
 bills.to_csv(f"{OUT_DIR}/bills.csv", index=False)
-
-# store committees
-committees = pd.DataFrame(committees_list).dropna().drop_duplicates(subset="committee_id")
-committees = committees[committees['committee_id'].isin(bills["committee_id"])]
-committees['committee'] = committees['committee'].apply(lambda text: " ".join(text.split()))
-committees.to_csv(f"{OUT_DIR}/committees.csv", index=False)
 
 # store sponsors
 sponsors = pd.DataFrame(sponsors_list).dropna()

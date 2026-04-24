@@ -37,11 +37,6 @@ Project to collect data on legislator voting and funding, and bill topics. Inten
 - Bills & Votes: 113th–119th Congress (2013–Present)
 - Legislators: All with registered bioguide_ids & have sponsored/cosponsored a bill
 - PAC Transactions: 1999–2026
-## Data Coverage
-
-- Bills & Votes: 113th–119th Congress (2013–Present)
-- Legislators: All with registered bioguide_ids & have sponsored/cosponsored a bill
-- PAC Transactions: 1999–2026
 
 ## Recreation steps
 

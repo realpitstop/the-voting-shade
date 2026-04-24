@@ -12,6 +12,8 @@ os.makedirs(MEM_DIR, exist_ok=True)
 # links
 MEM_URL = "https://unitedstates.github.io/congress-legislators/legislators-current.json"
 MEM_URL2 = "https://unitedstates.github.io/congress-legislators/legislators-historical.json"
+COM_URL = "https://unitedstates.github.io/congress-legislators/committee-membership-current.json"
+COM_LIST_URL = "https://unitedstates.github.io/congress-legislators/committees-current.json"
 
 # conversions for LIS
 CONVERSION = "https://www.senate.gov/legislative/LIS_MEMBER/cvc_member_data.xml"
@@ -37,6 +39,12 @@ if __name__ == "__main__":
     legislators_past = download_file(MEM_URL2)
     writeText(MEM_DIR + "/legislators.json", json.dumps(json.loads(legislators_current) + json.loads(legislators_past), indent=4))
     
+    # committee memberships and list
+    committee_membership = download_file(COM_URL)
+    writeText(MEM_DIR + "/committee_members.json", committee_membership)
+    committee_list = download_file(COM_LIST_URL)
+    writeText(MEM_DIR + "/committees.json", committee_list)
+
     # conversions for bioguide_id
     conv = download_file(CONVERSION)
     writeText(MEM_DIR + "/lookup.xml", conv)

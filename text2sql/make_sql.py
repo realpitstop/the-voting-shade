@@ -51,7 +51,6 @@ TOPICS = list(TOPIC_LIST.keys())
 SUBTOPICS = list(SUBTOPIC_LIST.keys())
 with open(SIC_MEANINGS, "r", encoding="utf-8") as f:
     INDUSTRIES = list(set(json.load(f).values()))
-print(INDUSTRIES)
 
 TOPICS = list(TOPIC_LIST.keys())
 
@@ -283,7 +282,7 @@ def build_sql_from_request(request, real=True) -> tuple[str, list[str]] | str:
             group_string, group_col = get_group_string(final['group_by'] + [{"table": subpath[-1][1], "column": subpath[-1][2]} for _ in [1] if i < len(path) - 1] + [{"table": subpath[0][1], "column": subpath[0][2]} for _ in [1] if i > 0])
             
             # add the group_by things into the select statement
-            select_string += (",\n\t" if group_col else "\n\t") + ",\n\t".join(group_col) + (f",\n\t{subpath[-1][1]}.{subpath[-1][2]}" if i < len(path) - 1 else "") + (f",\n\t{subpath[0][1]}.{subpath[0][2]}" if i > 0 else "")
+            select_string += (",\n\t" if (group_col and any([a[2] for a in all])) else "\n\t") + ",\n\t".join(group_col) + (f",\n\t{subpath[-1][1]}.{subpath[-1][2]}" if i < len(path) - 1 else "") + (f",\n\t{subpath[0][1]}.{subpath[0][2]}" if i > 0 else "")
             # assemble final CTE
             cte_string = table_string + select_string.replace('\n', '\n\t') + join_string.replace('\n', '\n\t') + where_string.replace('\n', '\n\t') + group_string.replace('\n', '\n\t') + having_string.replace('\n', '\n\t') + "\n)"
             CTEs.append(cte_string)
@@ -335,7 +334,7 @@ def build_sql_from_request(request, real=True) -> tuple[str, list[str]] | str:
         select_string = select_string[:-2]
 
     # get the group by string for whatever is supposed to be grouped
-    group_string = "", []
+    group_string = ""
     if group_by:
         group_string, group_col = get_group_string([gp for gp in group_by if table_map.get(gp['table'], None) is None])
 
