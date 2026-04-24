@@ -38,7 +38,7 @@
   {
     "table": "bills",
     "column": "committee_id",
-    "description": "ID of committee reviewing the bill",
+    "description": "Foreign key to comittee table",
     "type": "committees",
     "fanout": 1
   },
@@ -50,8 +50,29 @@
   },
   {
     "table": "committees",
-    "column": "committee",
+    "column": "committee_name",
     "description": "Name of the committee"
+  },
+  {
+    "table": "committees_members",
+    "column": "committee_id",
+    "description": "Foreign key to comittee table",
+    "type": "committees",
+    "fanout": 1
+  },
+  {
+    "table": "committees_members",
+    "column": "bioguide_id",
+    "description": "Foreign key to people table",
+    "type": "people",
+    "fanout": 1
+  },
+  {
+    "table": "sponsors",
+    "column": "bill_id",
+    "description": "Foreign key to bills table",
+    "type": "bills",
+    "fanout": 1
   },
   {
     "table": "sponsors",

@@ -20,18 +20,13 @@ for i in tables:
     globals()[i] = pd.read_csv(CLEAN_PATH + f'{i}.csv')
 
 # Build query (example given)
-request = QueryBuilder(limit=None)
+request = QueryBuilder(limit=250)
 (
     request
     .add_filter("industry", "oil and gas")
-    .add_filter("topic", "oil and gas")
-    .add_filter("role", "sponsor")
-    .add_filter("party", "Republican")
-    .add_filter("chamber", "house")
-    .add_metric("sponsor", "COUNT")
     .add_metric("money taken", "SUM")
-    .add_group("person name")
-    .set_rank("sponsor", "DESC", "COUNT")
+    .add_group("committee name")
+    .set_rank("money taken", "DESC", "SUM")
 )
 
 # Build sql from query
