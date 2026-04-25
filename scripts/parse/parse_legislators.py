@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import os
 from pathlib import Path
+from collections import Counter
 
 # file paths
 BASE_DIR = "./"
@@ -70,6 +71,15 @@ for committee, members in committee_member_map.items():
             "bioguide_id": member["bioguide"],
         })
 
+member_counts = Counter([row['committee_id'] for row in committee_rows])
+
+# update the committee_map data to include the count
+committee_list = []
+for thomas_id, info in committee_map.items():
+    c_id = info['committee_id']
+    info['member_count'] = member_counts.get(c_id, 0)
+    committee_list.append(info)
+
 # save conversion jsons
 with open(OUT_DIR + "/lis_bio.json", "w", encoding="utf-8") as f:
     f.write(json.dumps(lis_conversion))
@@ -90,7 +100,7 @@ df.to_csv(f"{OUT_DIR}/committees_members.csv", index=False)
 print("Saved committees_members.csv with", len(df), "rows")
 
 # save committee members table
-df = pd.DataFrame(committee_map.values()).dropna().sort_values("committee_id")
+df = pd.DataFrame(committee_list).dropna().sort_values("committee_id")
 df.to_csv(f"{OUT_DIR}/committees.csv", index=False)
 
 print("Saved committees.csv with", len(df), "rows")

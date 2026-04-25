@@ -54,6 +54,11 @@
     "description": "Name of the committee"
   },
   {
+    "table": "committees",
+    "column": "member_count",
+    "description": "Numbers of members in the committee"
+  },
+  {
     "table": "committees_members",
     "column": "committee_id",
     "description": "Foreign key to comittee table",
