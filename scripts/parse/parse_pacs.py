@@ -33,7 +33,9 @@ comm_master.to_csv(os.path.join(OUTPUT_DIR, "pacs.csv"), index=False)
 
 # make transactions file (groupby person & committee and get their total donations, replace cand_id with bioguide_id, filter for only committees present in pacs.csv)
 ptc_master = pd.read_csv(os.path.join(DATA_PATH, "pas2.csv"), dtype=ptctypes)
-ptc_master = ptc_master[['CMTE_ID', 'CAND_ID', 'TRANSACTION_AMT', 'ENTITY_TP']].groupby(['CMTE_ID', 'CAND_ID'])['TRANSACTION_AMT'].sum().reset_index()
+ptc_master = ptc_master[['CMTE_ID', 'CAND_ID', 'TRANSACTION_AMT', 'TRANSACTION_DT', 'ENTITY_TP']]
+ptc_master['YEAR'] = pd.to_datetime(ptc_master['TRANSACTION_DT'], format='%m%d%Y').dt.year
+ptc_master = ptc_master.groupby(['CMTE_ID', 'CAND_ID', 'YEAR'])['TRANSACTION_AMT'].sum().reset_index()
 ptc_master["bioguide_id"] = ptc_master["CAND_ID"].apply(lambda x: fec_to_bioguide.get(x, None))
 ptc_master = ptc_master.dropna(subset="bioguide_id")
 ptc_master = ptc_master.merge(comm_master[['CMTE_ID']], on='CMTE_ID')

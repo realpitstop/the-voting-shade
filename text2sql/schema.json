@@ -192,5 +192,10 @@
     "table": "donations",
     "column": "money_recieved",
     "description": "Money recieved from the corporate PAC industry"
+  },
+  {
+    "table": "donations",
+    "column": "cycle",
+    "description": "Election cycle year of the donations (year)"
   }
 ]

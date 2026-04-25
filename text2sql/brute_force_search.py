@@ -1,98 +1,109 @@
-import networkx as nx
 import pickle
+import networkx as nx
 from constants import GRAPH_PATH
-from itertools import permutations
 
-# load graph
 with open(GRAPH_PATH, 'rb') as f:
     G = pickle.load(f)
 
-# 
-def shortest_path(G, required_nodes, weight=None):
+
+def _greedy_path_sequence(G, required_nodes: list, weight=None) -> list:
     """
-    Method to get the shortest path between graph nodes
+    Greedy nearest-neighbor ordering of required_nodes.
     """
-    min_dist = float('inf')
-    best_path_sequence = None
+    unvisited = set(required_nodes)
+    current = required_nodes[0]
+    sequence = [current]
+    unvisited.remove(current)
 
-    for path_sequence in permutations(required_nodes):
-        current_dist = 0
-        possible_path = True
+    while unvisited:
+        nearest = min(
+            unvisited,
+            key=lambda n: nx.shortest_path_length(G, current, n, weight=weight)
+        )
+        sequence.append(nearest)
+        unvisited.remove(nearest)
+        current = nearest
 
-        for i in range(len(path_sequence) - 1):
-            try:
-                dist = nx.shortest_path_length(G, path_sequence[i], path_sequence[i + 1], weight=weight)
-                current_dist += dist
-            except nx.NetworkXNoPath:
-                possible_path = False
-                break
-
-        if possible_path and current_dist < min_dist:
-            min_dist = current_dist
-            best_path_sequence = path_sequence
-    best_path = []
-    best_path_sequence = list(best_path_sequence)
-    for i in range(len(best_path_sequence) - 1):
-        dist = nx.shortest_path(G, best_path_sequence[i], best_path_sequence[i + 1], weight=weight)
-        if len(best_path) >= 2: best_path.pop(-1)
-        best_path.extend(dist)
-    return best_path
+    return sequence
 
 
-def get_shortest_path(tables, aggs):
+def _expand_sequence_to_node_path(G, sequence: list, weight=None) -> list:
     """
-    Get the shortest join path between a list of tables in graph, taking into account aggregated metrics
+    Given an ordered list of required nodes, expand each consecutive pair
+    into the full intermediate node path through the graph.
     """
-    # Handle empty or single table cases
+    full_path = []
+    for i in range(len(sequence) - 1):
+        segment = nx.shortest_path(G, sequence[i], sequence[i + 1], weight=weight)
+        if full_path:
+            full_path.pop()  # remove duplicate junction node
+        full_path.extend(segment)
+    return full_path
+
+
+def get_shortest_path(tables: set, aggs: set) -> list:
+    """
+    Get the shortest join path between a list of tables in the graph,
+    splitting into separate segments where aggregation fanout requires a CTE.
+
+    Returns a list of path segments, where each segment is a list of
+    [from_table, to_table, foreign_key, fanout] edges.
+    A single-segment result means no CTE is needed.
+    """
     if not tables:
         return []
-    
+
     tables = list(tables)
+
     if len(tables) == 1:
-        return [tables]
-    
-    # get shortest path
-    path = shortest_path(G, tables)
-    
-    # path with foreign keys
+        return [[tables]]
+
+    sequence = _greedy_path_sequence(G, tables)
+    node_path = _expand_sequence_to_node_path(G, sequence)
+
+    # Walk the node path and split into segments where fan-out would cause row duplication.
     fk_path = [[]]
-
-    # whether an aggregated metric is part of the current joined table (prevent duplication)
-    metric = False
-
-    # whether the table has been fanned out (duplicated) and how (many to many, one to many, etc.)
-    fanned = None
-
-    # seen tables so that the path doesn't loop around (not necessary in SQL)
+    has_agg_metric = False
+    fanned = False
     seen = set()
-    for i in range(len(path)-1):
-        u, v = path[i], path[i+1]
+
+    for i in range(len(node_path) - 1):
+        u, v = node_path[i], node_path[i + 1]
         if v in seen: continue
-        if u in aggs: metric = True # aggregated metric part of table
+        if u in aggs: has_agg_metric = True
         seen.add(u)
 
         edge_data = G.get_edge_data(u, v)
         fk = edge_data.get('foreign_key')
         fanout = edge_data.get('fanout')
 
-        # conditions for whether or not to split and use a new table to prevent duplication
-        if (fanout == 1 and metric) or (fanned and v in aggs):
+        # Split into a new CTE segment when fan-out would duplicate agg rows
+        if (fanout == 1 and has_agg_metric) or (fanned and v in aggs):
             fk_path.append([])
-            metric = False
+            has_agg_metric = False
             fanned = False
         else:
             if fanout != 0: fanned = True
         fk_path[-1].append([u, v, fk, fanout])
     return fk_path
 
-def get_path_as_sql(path):
+
+def get_path_as_sql(path: list) -> str:
     """
-    Get given join path in format [[table1, table2, foreignkey]] in SQL format
+    Convert a path in [[from_table, to_table, foreign_key, ...], ...] format
+    into a FROM / INNER JOIN SQL string.
     """
-    pathString = ""
-    for i in range(len(path)):
-        if i == 0:
-            pathString += "\nFROM\n\t" + path[i][0]
-            if len(path[i]) == 1: break
-        pathString += f"\nINNER JOIN\n\t{path[i][1]} ON {path[i][0]}.{path[i][2]} = {path[i][1]}.{path[i][2]}"
-    return pathString
+    if not path:
+        return ""
+
+    sql = f"\nFROM\n\t{path[0][0]}"
+
+    # single-table path: path[0] is just [table_name]
+    if len(path[0]) == 1:
+        return sql
+
+    for edge in path:
+        from_table, to_table, fk = edge[0], edge[1], edge[2]
+        sql += f"\nINNER JOIN\n\t{to_table} ON {from_table}.{fk} = {to_table}.{fk}"
+
+    return sql

@@ -203,14 +203,17 @@ print(len(unmatched_sorted))
 unmatched_sorted["TRANSACTION_AMT"] /= total_corporate_money
 print(unmatched_sorted[["CONNECTED_ORG_NM", "CLEANED_NM", "SEC_MATCH", "match_score", "TRANSACTION_AMT"]][:151].to_string(index=False))
 
-# filter for 95+= matches
-final = company_totals[company_data["match_score"] >= 95]
-final["SEC_MATCH"] = company_data["SEC_MATCH"][company_data["match_score"] >= 95]
+final = company_totals.copy()
+final["SEC_MATCH"] = company_data["SEC_MATCH"]
 
-# convert matches to the SIC code
-final["SIC"] = final["SEC_MATCH"].apply(lambda x: SIC_MAP[x].zfill(4))
-final["industry"] = final["SIC"].apply(lambda x: INDUSTRY_MAP[x] if INDUSTRY_MAP[x] != "" else None)
-final = final.dropna(subset="industry")
+final["SIC"] = final["SEC_MATCH"].map(lambda x: SIC_MAP.get(x, "").zfill(4))
+
+final["industry"] = final["SIC"].map(lambda x: INDUSTRY_MAP.get(x, ""))
+
+final.loc[company_data['match_score'] < 0.95, 'industry'] = "Unknown"
+
+final["industry"] = final["industry"].replace("", None)
+final = final.dropna(subset=["industry"])
 
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_columns', None)
@@ -222,14 +225,15 @@ final = final.explode("CMTE_ID")
 final["CMTE_ID"] = final["CMTE_ID"].str[:]
 
 # add committees, candidates, and transaction amounts
-final = final[["CMTE_ID", "industry"]].merge(transactions[["CMTE_ID", "CAND_ID", "TRANSACTION_AMT", "bioguide_id"]], on="CMTE_ID")
+final = final[["CMTE_ID", "industry"]].merge(transactions[["CMTE_ID", "CAND_ID", "TRANSACTION_AMT", "YEAR", "bioguide_id"]], on="CMTE_ID")
 final = final.dropna(subset="bioguide_id")
 
 # rename column
 final["money_recieved"] = final["TRANSACTION_AMT"]
+final['cycle'] = final['YEAR'].apply(lambda x: int(x) + (int(x) % 2))
 
 # group by industry and bioguide_id
-final = final[["bioguide_id", "industry", "money_recieved"]].groupby(["industry", "bioguide_id"], as_index=False)["money_recieved"].sum()
+final = final[["bioguide_id", "industry", "cycle", "money_recieved"]].groupby(["industry", "bioguide_id", "cycle"], as_index=False)["money_recieved"].sum()
 final = final.sort_values(by='bioguide_id')
 
 final.to_csv(os.path.join(OUTPUT_DIR, "donations.csv"), index=False)
