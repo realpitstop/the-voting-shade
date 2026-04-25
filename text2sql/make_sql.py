@@ -3,39 +3,24 @@ from collections import defaultdict
 from datetime import datetime
 
 from brute_force_search import get_shortest_path, get_path_as_sql
-from match_query import getFaissMatch
+from match_query import Matcher
 from constants import SCHEMA_PATH, STANCES_PATH, SIC_MEANINGS
 from pypika import Table, Criterion, functions as fn
 from pypika.terms import LiteralValue
 
-# Only operations you can use on all values
-ALLOWED_OPS = {
-    "str": {"="},
-    "int": {"=", ">", "<", ">=", "<="},
-    "date": {"=", ">", "<", ">=", "<="}
-}
-
-# get the type of the value
-def infer_type(value):
-    if isinstance(value, int):
-        return "int"
-    if isinstance(value, datetime):
-        return "date"
-    return "str"
-
-
 with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-    schema = json.load(f)
+    _schema = json.load(f)
 
-# get list of columns, topics, subtopics, industries
-COLUMN_LIST = {
+# Maps "column_name description_text" to {column, table}
+# Only includes non key columns
+COLUMN_LIST: dict[str, dict] = {
     item["column"] + " " + item["description"]: {"column": item["column"], "table": item["table"]}
-    for item in schema if item.get("type", None) is None
+    for item in _schema if item.get("type") is None
 }
-COLUMNS = list(COLUMN_LIST.keys())
+COLUMNS: list[str] = list(COLUMN_LIST.keys())
 
-TOPIC_LIST = {}
-SUBTOPIC_LIST = {}
+TOPIC_LIST: dict[str, str] = {}
+SUBTOPIC_LIST: dict[str, str] = {}
 with open(STANCES_PATH, "r", encoding="utf-8") as f:
     for line in f:
         record = json.loads(line)
@@ -47,311 +32,380 @@ with open(STANCES_PATH, "r", encoding="utf-8") as f:
             TOPIC_LIST[record["text"]] = title
         else:
             SUBTOPIC_LIST[record["text"]] = title
-TOPICS = list(TOPIC_LIST.keys())
-SUBTOPICS = list(SUBTOPIC_LIST.keys())
+ 
 with open(SIC_MEANINGS, "r", encoding="utf-8") as f:
-    INDUSTRIES = list(set(json.load(f).values()))
+    INDUSTRIES: list[str] = list(set(json.load(f).values()))
 
-TOPICS = list(TOPIC_LIST.keys())
+_column_matcher   = Matcher(COLUMNS)
+_topic_matcher    = Matcher(list(TOPIC_LIST.keys()))
+_subtopic_matcher = Matcher(list(SUBTOPIC_LIST.keys()))
+_industry_matcher = Matcher(INDUSTRIES)
 
-# get the GROUP BY and HAVING portion of the SQL command
-def get_group_string(group_by):
-    group_col = set()
-    group_string = ""
-    if group_by:
-        for i in group_by:
-            col = f"{i['table']}.{i['column']}"
-            if i.get('value'):
-                col = f"{i['agg']}({col})" if i.get('agg') else col
-                group_col.add(f"HAVING\n\t{col} {i['op']} {i['value']}")
-            else:
-                group_col.add(col)
-        group_string = f"\nGROUP BY\n\t{',\n\t'.join([i for i in group_col if not i.startswith('HAVING')])}"
-    return group_string, group_col
+_AGG_MAP = {
+    "SUM":   fn.Sum,
+    "AVG":   fn.Avg,
+    "COUNT": fn.Count,
+    "MAX":   fn.Max,
+    "MIN":   fn.Min,
+}
 
-# get the conditions from a list of criterion
-def get_where_string(cols, real, params):
-    criteria = []
-    having = []
-    for i in range(len(cols)):
-        concat, col, table, op, value, agg = cols[i]
+# helpers
+def _resolve_column(field: str) -> dict:
+    """Semantic-match a field name to {column, table}"""
+    return COLUMN_LIST[_column_matcher.match(field)]
 
-        term = make_condition(col, table, op, value, agg, real, params)
 
-        if concat == "OR" and criteria and not agg:
-            criteria[-1] = criteria[-1] | term
-        elif concat == "OR" and having and agg:
-            having[-1] = having[-1] | term
-        elif not agg:
-            criteria.append(term)
-        elif agg:
-            having.append(term)
-
-    return params, criteria, having
-
-# make conditions (abc == "abc")
-def make_condition(col, table, op, value, agg, real, params):
-    addedVal = value
+def _resolve_filter_value(col: str, value):
+    """
+    For special columns (topic/subtopic/industry/date), translate the
+    raw user value into the DB value. Only for special columns.
+    """
     if isinstance(value, datetime):
-        addedVal = value.strftime('%Y-%m-%d')
-    elif col == "topic":
-        addedVal = TOPIC_LIST[getFaissMatch(value, TOPICS)]
-    elif col == "subtopic":
-        addedVal = SUBTOPIC_LIST[getFaissMatch(value, SUBTOPICS)]
-    elif col == "industry":
-        addedVal = getFaissMatch(value, INDUSTRIES)
+        return value.strftime('%Y-%m-%d')
+    if col == "topic":
+        return TOPIC_LIST[_topic_matcher.match(value)]
+    if col == "subtopic":
+        return SUBTOPIC_LIST[_subtopic_matcher.match(value)]
+    if col == "industry":
+        return _industry_matcher.match(value)
+    if col == "introduced_date" and isinstance(value, str):
+        return datetime.strptime(value, "%m/%d/%Y").strftime('%Y-%m-%d')
+    return value
 
-    if real: params.append(addedVal)
+
+def _make_condition(col: str, table: str, op: str, value, agg: str | None,
+                            real: bool, params: list):
+    """
+    Build a single criterion for one filter clause.
+    Appends to `params` when real=True (real implementation, not testing).
+    """
+    resolved = _resolve_filter_value(col, value)
 
     if real:
-        val_placeholder = LiteralValue("?")
+        params.append(resolved)
+        val_term = LiteralValue("?")
     else:
-        if isinstance(addedVal, str):
-            val_placeholder = LiteralValue(f"'{addedVal}'")
-        else:
-            val_placeholder = addedVal
+        val_term = LiteralValue(f"'{resolved}'") if isinstance(resolved, str) else resolved
 
     column_obj = Table(table).field(col)
 
     if agg:
-        # Map string aggregate names to Pypika functions
-        agg_map = {
-            "SUM": fn.Sum,
-            "AVG": fn.Avg,
-            "COUNT": fn.Count,
-            "MAX": fn.Max,
-            "MIN": fn.Min
-        }
-        # Apply the function (e.g., fn.Sum(column_obj))
-        column_term = agg_map[agg.upper()](column_obj)
-        # Give it an alias to avoid name collisions
-        column_term = column_term.as_(f"{agg}_{col}")
+        agg_fn = _AGG_MAP[agg.upper()]
+        column_term = agg_fn(column_obj).as_(f"{agg}_{col}")
     else:
         column_term = column_obj
 
-    if op == "=":
-        term = (column_term == val_placeholder)
-    elif op == ">":
-        term = (column_term > val_placeholder)
-    elif op == "<":
-        term = (column_term < val_placeholder)
-    elif op == ">=":
-        term = (column_term >= val_placeholder)
-    elif op == "<=":
-        term = (column_term <= val_placeholder)
-
-    return term
+    ops = {"=": column_term.__eq__, ">": column_term.__gt__,
+           "<": column_term.__lt__, ">=": column_term.__ge__, "<=": column_term.__le__}
+    return ops[op](val_term)
 
 
-def build_sql_from_request(request, real=True) -> tuple[str, list[str]] | str:
+def _build_where_and_having(filter_rows: list, real: bool, params: list):
     """
-    {
-        filters: [{"concat": ..., "column": ..., "op": ..., "value": ...}, ...],
-
-        metric: [{"field": ..., "agg": ...}, ...],
-
-        rank: {"column": ..., "order": ...},
-
-        group_by: [{"column": ..., "order": ...},...],
-
-        limit: int
-    }
+    Turn a list of [concat, col, table, op, value, agg] rows into separate
+    criterion lists for WHERE and HAVING.
     """
-    # get request attributes
-    filters, metric, rank, limit, group_by = request.filters, request.metrics, request.rank, request.limit, request.group_by
+    criteria = []
+    having = []
 
-    # parameter values to replace the ?
-    params = []
+    for concat, col, table, op, value, agg in filter_rows:
+        term = _make_condition(col, table, op, value, agg, real, params)
+        target = having if agg else criteria
 
-    # tables with aggregated values
-    aggs = set()
-
-    # matching tables with all their respective request attributes
-    tablematch = defaultdict(lambda: defaultdict(list))
-
-    # match metric columns with their closest semantic match and add it to table match and aggs
-    metric = [{**m, **COLUMN_LIST[getFaissMatch(m["field"], COLUMNS)]} for m in metric]
-    for i in metric:
-        tablematch[i["table"]]["metric"].append(i)
-        if i["agg"]:
-            aggs.add(i['table'])
-
-    # match rank column with its closest semantic match and add it to table match and aggs
-    if rank:
-        rank = {**rank, **COLUMN_LIST[getFaissMatch(rank["column"], COLUMNS)]}
-        tablematch[rank["table"]]["rank"].append(rank)
-        if rank['agg']:
-            aggs.add(rank['table'])
-
-    # match group by columns with their closest semantic match and add it to table match
-    if group_by:
-        group_by = [{**g, **COLUMN_LIST[getFaissMatch(g['field'], COLUMNS)]} for g in group_by]
-        for i in group_by:
-            tablematch[i["table"]]["group_by"].append(i)
-
-    # match filter columns with their closest semantic matches
-    filters = [{**f, **COLUMN_LIST[getFaissMatch(f["column"], COLUMNS)]} for f in filters]
-
-    cols = []
-
-    # make a list of [concatenator, column, table, operation, value, aggregation] for all filters
-    for f in filters:
-        concat = f["concat"]
-        col = f["column"]
-        table = f["table"]
-        op = f["op"]
-        value = f["value"]
-        agg = f["agg"]
-
-        if agg:
-            aggs.add(table)
-
-        tablematch[table]["filter"].append([concat, col, table, op, value, agg])
-
-        if col == "introduced_date":
-            value = datetime.strptime(value, "%m/%d/%Y")
-
-        cols.append([concat, col, table, op, value, agg])
-
-    # get list of tables
-    tables = set(tablematch.keys())
-    # get the shortest path
-    path = get_shortest_path(tables, set(aggs))
-
-    # prepare CTE if necessary
-    CTE_string = ""
-
-    # dict to map tables to their CTE
-    table_map = {}
-    if len(path) == 1:
-        # no CTE required
-        split = False
-        path = path[0]
-    else:
-        split = True
-        CTEs = []
-        new_path = []
-        # generate names for each CTE
-        names = [i[0][0][:3].capitalize() + i[-1][1][:3].capitalize() for i in path]
-        for i in range(len(path)):
-            subpath, cte_name = path[i], names[i]
-            if i < (len(path) - 1):
-                # add to the new join path
-                new_path.append([names[i], names[i+1], subpath[-1][2]])
-            
-            # create start of table "TABLE NAME AS ("
-            table_string = "\n" + cte_name + " AS ("
-            subTables = set()
-            for p in subpath:
-                # add all the tables in the subpath
-                subTables.add(p[0])
-                subTables.add(p[1])
-            
-            # dict to group every query attribute with all it's instances- removing tables
-            final = defaultdict(list)
-            all = []
-            for table in subTables:
-                table_map[table] = cte_name
-                for k, v in tablematch[table].items():
-                    for ite in v:
-                        if isinstance(ite, list): # if it's a filter string
-                            all.append([ite[2], ite[1], ite[5]])
-                        if isinstance(ite, dict):
-                            print(ite)
-                            all.append([ite['table'], ite['column'], ite['agg']])
-                    final[k].extend(v)
-
-            # add the agged metrics with alias as opped_name
-            select_string = "\nSELECT\n\t" + ",\n\t".join([f"{a[2]}({a[0]}.{a[1]}) AS opped_{a[1]}" for a in all if a[2]])
-            # get the join path for the CTE
-            join_string = get_path_as_sql(subpath)
-            # get the filter where + having strings for the CTE
-            params, criteria, having = get_where_string(final['filter'], real, params)
-
-            where_string = ""
-            if criteria:
-                final_criterion = Criterion.all(criteria)
-                where_string += f"\nWHERE {final_criterion.get_sql(quote_char=None, with_namespace=True).replace(" AND ", "\n\tAND ").replace(" OR ", "\n\tOR ")}"
-
-            having_string = ""
-            if having:
-                final_having = Criterion.all(having)
-                having_string += f"\nHAVING {final_having.get_sql(quote_char=None, with_namespace=True).replace(" AND ", "\n\tAND ").replace(" OR ", "\n\tOR ")}"
-            
-            # get group by including what was orignally intended and all the non-aggregated things desired
-            group_string, group_col = get_group_string(final['group_by'] + [{"table": subpath[-1][1], "column": subpath[-1][2]} for _ in [1] if i < len(path) - 1] + [{"table": subpath[0][1], "column": subpath[0][2]} for _ in [1] if i > 0])
-            
-            # add the group_by things into the select statement
-            select_string += (",\n\t" if (group_col and any([a[2] for a in all])) else "\n\t") + ",\n\t".join(group_col) + (f",\n\t{subpath[-1][1]}.{subpath[-1][2]}" if i < len(path) - 1 else "") + (f",\n\t{subpath[0][1]}.{subpath[0][2]}" if i > 0 else "")
-            # assemble final CTE
-            cte_string = table_string + select_string.replace('\n', '\n\t') + join_string.replace('\n', '\n\t') + where_string.replace('\n', '\n\t') + group_string.replace('\n', '\n\t') + having_string.replace('\n', '\n\t') + "\n)"
-            CTEs.append(cte_string)
-            if rank: rank['table'] = names[i] if rank['table'] in subTables else rank['table']
-        CTE_string = "WITH" + ",\n".join(CTEs) + "\n\n"
-        path = new_path
-
-    # get join path of path (updated if CTE are included)
-    join_string = get_path_as_sql(path)
-    final_cols = []
-    for i in range(len(cols)):
-        col = cols[i]
-        if table_map.get(col[2], None) is None: final_cols.append(col)
-
-    params, criteria, having = get_where_string(final_cols, real, params)
-    
-    # get where (filters) & having (filters w aggregations)
-    where_string = ""
-    if criteria:
-        final_criterion = Criterion.all(criteria)
-        where_string += f"\nWHERE\n\t{final_criterion.get_sql(quote_char=None, with_namespace=True).replace(" AND ", "\n\tAND ").replace(" OR ", "\n\tOR ")}"
-
-    having_string = ""
-    if having:
-        final_having = Criterion.all(having)
-        having_string += f"\nHAVING {final_having.get_sql(quote_char=None, with_namespace=True).replace(" AND ", "\n\tAND ").replace(" OR ", "\n\tOR ")}"
-
-    # get ordering string
-    order_string = ""
-    if rank:
-        rank['table'] = table_map.get(rank['table'], rank['table'])
-        if rank["agg"] is None:
-            order_string = f"\nORDER BY {rank['table']}.{rank['column']} {rank['order']}"
+        if concat == "OR" and target:
+            target[-1] = target[-1] | term
         else:
-            order_string = f"\nORDER BY {rank['agg']}({rank['table']}.{rank['column']}) {rank['order']}" if not split else f"\nORDER BY {rank['table']}.opped_{rank['column']} {rank['order']}"
+            target.append(term)
 
-    # get select string that has the metrics
-    select_string = "SELECT "
-    for m in metric:
-        m['table'] = table_map.get(m['table'], m['table'])
-        if m.get("agg"):
-            if not split: select_string += f"{m['agg']}({m['table']}.{m['column']}),\n\t"
-            if split: select_string += f"{m['table']}.opped_{m['column']},\n\t"
-    
-    # if there's nothing just get everything
-    if select_string == "SELECT ":
-        select_string += f"DISTINCT *"
-    else:
-        select_string = select_string[:-2]
+    return criteria, having
 
-    # get the group by string for whatever is supposed to be grouped
+
+def _criterion_to_sql(criterion_list: list) -> str:
+    """
+    Converts criterion into string SQL equivalent.
+    """
+    return (
+        Criterion.all(criterion_list)
+        .get_sql(quote_char=None, with_namespace=True)
+        .replace(" AND ", "\n\tAND ")
+        .replace(" OR ",  "\n\tOR ")
+    )
+
+
+def _build_group_by_sql(group_by_items: list) -> tuple[str, set]:
+    """
+    Returns (GROUP BY sql string, set of group expressions).
+    Items with a value produce HAVING clauses; others produce GROUP BY columns.
+    """
+    group_cols = set()
+    having_clauses = set()
+
+    for item in group_by_items:
+        col_expr = f"{item['table']}.{item['column']}"
+        if item.get('value'):
+            agg_expr = f"{item['agg']}({col_expr})" if item.get('agg') else col_expr
+            having_clauses.add(f"HAVING\n\t{agg_expr} {item['op']} {item['value']}")
+        else:
+            group_cols.add(col_expr)
+
     group_string = ""
+    if group_cols:
+        group_string = f"\nGROUP BY\n\t{',\n\t'.join(group_cols)}"
+
+    return group_string, group_cols | having_clauses
+
+
+# CTE builder
+
+def _build_cte(
+    subpath: list,
+    cte_name: str,
+    cte_index: int,
+    total_ctes: int,
+    tablematch: dict,
+    real: bool,
+    params: list,
+) -> tuple[str, dict]:
+    """
+    Build one CTE block and return (cte_sql_string, {original_table: cte_name} map).
+    """
+    # Collect all original tables covered by this subpath
+    sub_tables = set()
+    for edge in subpath:
+        sub_tables.add(edge[0])
+        sub_tables.add(edge[1])
+
+    table_map = {t: cte_name for t in sub_tables}
+
+    # Gather all query attributes for tables in this CTE
+    final: dict = defaultdict(list)
+    agg_items = [] # (table, column, agg) for aggregated metrics / filters
+
+    for table in sub_tables:
+        for key, items in tablematch[table].items():
+            for item in items:
+                if isinstance(item, list): # filter row
+                    agg_items.append((item[2], item[1], item[5]))
+                elif isinstance(item, dict): # metric / group by row
+                    agg_items.append((item['table'], item['column'], item.get('agg')))
+            final[key].extend(items)
+
+    # SELECT aggregated expressions
+    agg_select_parts = [
+        f"{agg}({tbl}.{col}) AS opped_{col}"
+        for tbl, col, agg in agg_items if agg
+    ]
+
+    # GROUP BY - user-requested groups and FK columns needed
+    extra_group_items = []
+    if cte_index < total_ctes - 1:
+        # expose the FK that links to the next CTE
+        extra_group_items.append({"table": subpath[-1][1], "column": subpath[-1][2]})
+    if cte_index > 0:
+        # expose the FK that links from the previous CTE
+        extra_group_items.append({"table": subpath[0][1], "column": subpath[0][2]})
+
+    group_string, group_col_set = _build_group_by_sql(final['group_by'] + extra_group_items)
+
+    # Non-HAVING group cols go into SELECT too
+    plain_group_cols = [c for c in group_col_set if not c.startswith("HAVING")]
+
+    select_parts = agg_select_parts + plain_group_cols
+    if cte_index < total_ctes - 1:
+        select_parts.append(f"{subpath[-1][1]}.{subpath[-1][2]}")
+    if cte_index > 0:
+        select_parts.append(f"{subpath[0][1]}.{subpath[0][2]}")
+
+    select_string = "\nSELECT\n\t" + ",\n\t".join(select_parts)
+
+    join_string   = get_path_as_sql(subpath)
+    criteria, having = _build_where_and_having(final['filter'], real, params)
+
+    where_string = f"\nWHERE {_criterion_to_sql(criteria)}" if criteria else ""
+    having_string = f"\nHAVING {_criterion_to_sql(having)}" if having  else ""
+
+    def indent(s):
+        return s.replace('\n', '\n\t')
+
+    cte_body = (
+        f"\n{cte_name} AS ("
+        + indent(select_string)
+        + indent(join_string)
+        + indent(where_string)
+        + indent(group_string)
+        + indent(having_string)
+        + "\n)"
+    )
+    return cte_body, table_map
+
+
+# Public entry point
+
+def build_sql_from_request(request, real: bool = True) -> tuple[str, list] | str:
+    """
+    Convert a QueryBuilder instance into a SQL string (and parameter list when real=True).
+
+    Pipeline:
+      1. Resolve field names via semantic matching
+      2. Find shortest join path, splitting into CTEs where needed
+      3. Build CTE blocks if necessary
+      4. Build the final SELECT, WHER, GROUP BY, ORDER BY
+      5. Assemble and return
+    """
+    filters = request.filters
+    metrics = request.metrics
+    rank = request.rank
+    limit = request.limit
+    group_by = request.group_by
+
+    params: list = []
+    aggs: set = set()
+
+    # Resolve field names
+
+    resolved_metrics = [{**m, **_resolve_column(m["field"])} for m in metrics]
+    for m in resolved_metrics:
+        tablematch_entry = m  # kept for clarity below
+        if m.get("agg"):
+            aggs.add(m["table"])
+
+    resolved_rank = None
+    if rank:
+        resolved_rank = {**rank, **_resolve_column(rank["column"])}
+        if resolved_rank.get("agg"):
+            aggs.add(resolved_rank["table"])
+
+    resolved_group_by = []
     if group_by:
-        group_string, group_col = get_group_string([gp for gp in group_by if table_map.get(gp['table'], None) is None])
+        resolved_group_by = [{**g, **_resolve_column(g["field"])} for g in group_by]
 
-    group_by = [{**gp, 'table': table_map.get(gp['table'], gp['table'])} for gp in group_by]
+    resolved_filters = [{**f, **_resolve_column(f["column"])} for f in filters]
 
-    # assemble the true final select string
-    select_cols = [f"{group['table']}.{group['column']}" for group in group_by]
-    select_string = f"SELECT DISTINCT\n\t{',\n\t'.join(select_cols) + ', ' if select_cols else ""}"
+    # Build tablematch and flat filter list
 
-    select_string += ", ".join([f"{m['agg']}({m['table']}.{m['column']})" if m.get('agg') and not split else f"{m['table']}.opped_{m['column']}" if m.get('agg') and split else f"{m['table']}.{m['column']}" for m in metric])
+    tablematch: dict = defaultdict(lambda: defaultdict(list))
 
-    # add limit
+    for m in resolved_metrics:
+        tablematch[m["table"]]["metric"].append(m)
+
+    if resolved_rank:
+        tablematch[resolved_rank["table"]]["rank"].append(resolved_rank)
+
+    for g in resolved_group_by:
+        tablematch[g["table"]]["group_by"].append(g)
+
+    filter_rows = [] # flat [concat, col, table, op, value, agg] for final WHERE
+    for f in resolved_filters:
+        row = [f["concat"], f["column"], f["table"], f["op"], f["value"], f.get("agg")]
+        if f.get("agg"):
+            aggs.add(f["table"])
+        tablematch[f["table"]]["filter"].append(row)
+        filter_rows.append(row)
+
+    # Find join path
+
+    tables = set(tablematch.keys())
+    path_segments = get_shortest_path(tables, aggs)
+
+    # Build CTEs if the path was split
+
+    cte_string = ""
+    table_map: dict = {} # original table name to CTE name
+    split = len(path_segments) > 1
+
+    if split:
+        cte_blocks = []
+        cte_names  = [
+            seg[0][0][:3].capitalize() + seg[-1][1][:3].capitalize() # first three characters of first and last tables
+            for seg in path_segments
+        ]
+        new_path = []
+
+        for idx, (subpath, cte_name) in enumerate(zip(path_segments, cte_names)):
+            cte_block, sub_map = _build_cte(
+                subpath, cte_name, idx, len(path_segments),
+                tablematch, real, params
+            )
+            cte_blocks.append(cte_block)
+            table_map.update(sub_map)
+
+            if idx < len(path_segments) - 1:
+                new_path.append([cte_name, cte_names[idx + 1], subpath[-1][2]])
+
+            # point rank to the CTE name if its source table is in this segment
+            if resolved_rank and resolved_rank["table"] in sub_map:
+                resolved_rank = {**resolved_rank, "table": cte_name}
+
+        cte_string = "WITH" + ",\n".join(cte_blocks) + "\n\n"
+        final_path = new_path
+    else:
+        final_path = path_segments[0] if path_segments else []
+
+    # Build outer WHERE or HAVING
+    # Only keep filters whose table wasn't absorbed into a CTE
+    outer_filter_rows = [r for r in filter_rows if table_map.get(r[2]) is None]
+    outer_criteria, outer_having = _build_where_and_having(outer_filter_rows, real, params)
+
+    where_string  = f"\nWHERE\n\t{_criterion_to_sql(outer_criteria)}" if outer_criteria else ""
+    having_string = f"\nHAVING {_criterion_to_sql(outer_having)}" if outer_having  else ""
+
+    # ORDER BY
+    
+    order_string = ""
+    if resolved_rank:
+        r = resolved_rank
+        r_table = table_map.get(r["table"], r["table"])
+        if r.get("agg") is None:
+            order_string = f"\nORDER BY {r_table}.{r['column']} {r['order']}"
+        elif split:
+            order_string = f"\nORDER BY {r_table}.opped_{r['column']} {r['order']}"
+        else:
+            order_string = f"\nORDER BY {r['agg']}({r_table}.{r['column']}) {r['order']}"
+
     if limit:
         order_string += f"\nLIMIT {limit}"
 
-    # assemble final sql query
-    sql = CTE_string + select_string + join_string + where_string + group_string + having_string + order_string + ";"
+    # SELECT
+    # Remap metric tables if they ended up in a CTE
+    final_metrics = [{**m, "table": table_map.get(m["table"], m["table"])} for m in resolved_metrics]
+    final_group_by = [{**g, "table": table_map.get(g["table"], g["table"])} for g in resolved_group_by]
 
-    # return with params if it's a real request that needs to be protected
-    return sql if not real else (sql, params)
+    group_cols_select = [f"{g['table']}.{g['column']}" for g in final_group_by]
+
+    metric_select_parts = []
+    for m in final_metrics:
+        if m.get("agg"):
+            if split:
+                metric_select_parts.append(f"{m['table']}.opped_{m['column']}")
+            else:
+                metric_select_parts.append(f"{m['agg']}({m['table']}.{m['column']})")
+        else:
+            metric_select_parts.append(f"{m['table']}.{m['column']}")
+
+    if group_cols_select or metric_select_parts:
+        all_select = group_cols_select + metric_select_parts
+        select_string = f"SELECT DISTINCT\n\t{',\n\t'.join(all_select)}"
+    else:
+        select_string = "SELECT DISTINCT *"
+
+    # GROUP BY 
+
+    outer_group_by_items = [g for g in final_group_by if table_map.get(g.get("table")) is None]
+    group_string, _ = _build_group_by_sql(outer_group_by_items)
+
+    # Assemble
+
+    join_string = get_path_as_sql(final_path)
+
+    sql = (
+        cte_string
+        + select_string
+        + join_string
+        + where_string
+        + group_string
+        + having_string
+        + order_string
+        + ";"
+    )
+
+    return (sql, params) if real else sql

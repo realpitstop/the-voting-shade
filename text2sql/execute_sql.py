@@ -25,7 +25,7 @@ request = QueryBuilder(limit=250)
     request
     .add_filter("industry", "oil and gas")
     .add_metric("money taken", "SUM")
-    .add_group("committee name")
+    .add_group("person name")
     .set_rank("money taken", "DESC", "SUM")
 )
 
