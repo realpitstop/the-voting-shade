@@ -23,8 +23,9 @@ for i in tables:
 request = QueryBuilder(limit=250)
 (
     request
-    .add_filter("industry", "oil and gas")
+    .add_filter("election cycle", 2026)
     .add_metric("money taken", "SUM")
+    .add_metric("member count")
     .add_group("committee name")
     .set_rank("money taken", "DESC", "SUM")
 )

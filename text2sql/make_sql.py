@@ -165,14 +165,13 @@ def _classify_metric(metric: dict, table_map: dict, split: bool, outer_group_by:
 def _render_metric_select(metric: dict, table_map: dict, split: bool, outer_group_by: bool) -> str:
     """Render a select and how it should be aggregated"""
     placement = _classify_metric(metric, table_map, split, outer_group_by)
-    print(metric, placement)
     t = table_map.get(metric["table"], metric["table"])
     col = metric["column"]
     agg = metric.get("agg")
-    if placement == "outer" or not agg:
+    if placement == "outer":
         return f"{agg}({t}.{col})" if agg else f"{t}.{col}"
     elif placement == "cte":
-        return f"{t}.opped_{col}"
+        return f"{t}.opped_{col}" if agg else f"ANY_VALUE({t}.{col})"
     else: # re-agg
         return f"{agg}({t}.opped_{col})"
 
@@ -231,6 +230,12 @@ def _build_cte(
         for tbl, col, agg in agg_items if agg
     ]
 
+    # SELECT metric expressions
+    metric_select_parts = [
+        f"ANY_VALUE({metric['table']}.{metric['column']}) as {metric['column']}" 
+        for metric in final['metric'] if metric['agg'] is None
+    ]
+
     # GROUP BY - user-requested groups and FK columns needed
     extra_group_items = []
     if cte_index < total_ctes - 1:
@@ -245,7 +250,7 @@ def _build_cte(
     # Non-HAVING group cols go into SELECT too
     plain_group_cols = [c for c in group_col_set if not c.startswith("HAVING")]
 
-    select_parts = agg_select_parts + plain_group_cols
+    select_parts = metric_select_parts + agg_select_parts + plain_group_cols
     if cte_index < total_ctes - 1:
         select_parts.append(f"{subpath[-1][1]}.{subpath[-1][2]}")
     if cte_index > 0:
