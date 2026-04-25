@@ -154,6 +154,41 @@ def _build_group_by_sql(group_by_items: list) -> tuple[str, set]:
 
     return group_string, group_cols | having_clauses
 
+def _classify_metric(metric: dict, table_map: dict, split: bool, outer_group_by: bool) -> str:
+    """Determine whether a metric needs to be aggregated."""
+    if not split:
+        return "outer"
+    if outer_group_by and metric.get("agg"):
+        return "re-agg"
+    return "cte"
+
+def _render_metric_select(metric: dict, table_map: dict, split: bool, outer_group_by: bool) -> str:
+    """Render a select and how it should be aggregated"""
+    placement = _classify_metric(metric, table_map, split, outer_group_by)
+    print(metric, placement)
+    t = table_map.get(metric["table"], metric["table"])
+    col = metric["column"]
+    agg = metric.get("agg")
+    if placement == "outer" or not agg:
+        return f"{agg}({t}.{col})" if agg else f"{t}.{col}"
+    elif placement == "cte":
+        return f"{t}.opped_{col}"
+    else: # re-agg
+        return f"{agg}({t}.opped_{col})"
+
+def _render_rank_order(rank: dict, table_map: dict, split: bool, outer_group_by: bool) -> str:
+    """Render a rank and how it should be aggregated"""
+    placement = _classify_metric(rank, table_map, split, outer_group_by)
+    t = table_map.get(rank["table"], rank["table"])
+    col = rank["column"]
+    agg = rank.get("agg")
+    if placement == "outer" or not agg:
+        expr = f"{agg}({t}.{col})" if agg else f"{t}.{col}"
+    elif placement == "cte":
+        expr = f"{t}.opped_{col}"
+    else:
+        expr = f"{agg}({t}.opped_{col})"
+    return f"\nORDER BY {expr} {rank['order']}"
 
 # CTE builder
 
@@ -218,7 +253,7 @@ def _build_cte(
 
     select_string = "\nSELECT\n\t" + ",\n\t".join(select_parts)
 
-    join_string   = get_path_as_sql(subpath)
+    join_string = get_path_as_sql(subpath)
     criteria, having = _build_where_and_having(final['filter'], real, params)
 
     where_string = f"\nWHERE {_criterion_to_sql(criteria)}" if criteria else ""
@@ -349,49 +384,48 @@ def build_sql_from_request(request, real: bool = True) -> tuple[str, list] | str
     where_string  = f"\nWHERE\n\t{_criterion_to_sql(outer_criteria)}" if outer_criteria else ""
     having_string = f"\nHAVING {_criterion_to_sql(outer_having)}" if outer_having  else ""
 
-    # ORDER BY
-    
-    order_string = ""
-    if resolved_rank:
-        r = resolved_rank
-        r_table = table_map.get(r["table"], r["table"])
-        if r.get("agg") is None:
-            order_string = f"\nORDER BY {r_table}.{r['column']} {r['order']}"
-        elif split:
-            order_string = f"\nORDER BY {r_table}.opped_{r['column']} {r['order']}"
-        else:
-            order_string = f"\nORDER BY {r['agg']}({r_table}.{r['column']}) {r['order']}"
-
-    if limit:
-        order_string += f"\nLIMIT {limit}"
-
     # SELECT
     # Remap metric tables if they ended up in a CTE
     final_metrics = [{**m, "table": table_map.get(m["table"], m["table"])} for m in resolved_metrics]
     final_group_by = [{**g, "table": table_map.get(g["table"], g["table"])} for g in resolved_group_by]
+    has_outer_group_by: bool = len(final_group_by) > 0
 
     group_cols_select = [f"{g['table']}.{g['column']}" for g in final_group_by]
 
-    metric_select_parts = []
-    for m in final_metrics:
-        if m.get("agg"):
-            if split:
-                metric_select_parts.append(f"{m['table']}.opped_{m['column']}")
-            else:
-                metric_select_parts.append(f"{m['agg']}({m['table']}.{m['column']})")
-        else:
-            metric_select_parts.append(f"{m['table']}.{m['column']}")
+    metric_select_parts = [_render_metric_select(m, table_map, split, has_outer_group_by) for m in final_metrics]
 
     if group_cols_select or metric_select_parts:
         all_select = group_cols_select + metric_select_parts
         select_string = f"SELECT DISTINCT\n\t{',\n\t'.join(all_select)}"
     else:
         select_string = "SELECT DISTINCT *"
+    
+    # ORDER BY
+    
+    order_string = ""
+    if resolved_rank:
+        order_string = _render_rank_order(resolved_rank, table_map, split, has_outer_group_by)
+
+    if limit:
+        order_string += f"\nLIMIT {limit}"
 
     # GROUP BY 
 
     outer_group_by_items = [g for g in final_group_by if table_map.get(g.get("table")) is None]
     group_string, _ = _build_group_by_sql(outer_group_by_items)
+
+    # reaggregate necessary metrics
+    reag_metrics = [m for m in final_metrics if _classify_metric(m, table_map, split, has_outer_group_by) == "re-agg"]
+    if reag_metrics:
+        cte_group_items = [g for g in final_group_by if table_map.get(g["table"]) is not None]
+        extra_group_string, _ = _build_group_by_sql(cte_group_items)
+        if group_string and extra_group_string:
+            existing_cols = group_string.replace("\nGROUP BY\n\t", "").split(",\n\t")
+            extra_cols = extra_group_string.replace("\nGROUP BY\n\t", "").split(",\n\t")
+            merged = list(dict.fromkeys(existing_cols + extra_cols))
+            group_string = f"\nGROUP BY\n\t{',\n\t'.join(merged)}"
+        elif extra_group_string:
+            group_string = extra_group_string
 
     # Assemble
 
